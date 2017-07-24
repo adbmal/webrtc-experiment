@@ -5,10 +5,13 @@ const transform = require('sdp-transform');
 
 const dgram = require('dgram');
 const udpServer = dgram.createSocket('udp4');
-const stun = require('vs-stun');
+const stun = require('stun-agent');
 
 var iceUfrag;
 var icePwd;
+var iceUfrag2 = '7i05';
+var icePwd2 = 'yJ4kGH2x2bXp0QEWh1Qa1Vdm';
+
 // $ GET /package.json
 app.use(serve('static'));
 
@@ -33,12 +36,12 @@ io.on('connection', function(client) {
             return
         var { ip, port, ufrag } = candidateParser(data)
             // console.log(ip, port, ufrag, data.candidate)
-        var packet = stun.create.bindingRequest({ username: client.iceUfrag, password: client.icePwd });
+            // var packet = stun.create.bindingRequest({ username: client.iceUfrag, password: client.icePwd });
 
-        udpServer.send(packet.raw, 0, packet.length, port, ip, function(err, bytes) {
-            if (err) throw err;
-            console.log('UDP message sent to ' + ip + ':' + port);
-        });
+        // udpServer.send(packet.raw, 0, packet.length, port, ip, function(err, bytes) {
+        //     if (err) throw err;
+        //     console.log('UDP message sent to ' + ip + ':' + port);
+        // });
 
         client.candidateSent = true
         const candidate = {
@@ -94,26 +97,48 @@ udpServer.on('error', (err) => {
     console.log(`udpServer error:\n${err.stack}`);
     udpServer.close();
 });
+// console.log(stun.constants)
 
 udpServer.on('message', (msg, rinfo) => {
     // var packet = Packet.parse(msg);
-    const request = stunParser(msg)
-    console.log(request)
-    var packet = stun.create.bindingSuccess({ username: iceUfrag, password: icePwd });
-    var error, address = { host: rinfo.address, port: rinfo.port, family: 'IPv4' }
-    if (error = packet.append.responseAddress(address)) console.log(error);
+    // const request = stunParser(msg)
+    // console.log(request)
+    const packet = stun.StunMessage.from(msg)
+    console.log(packet, icePwd, stun.validateFingerprint(packet), stun.validateMessageIntegrity(packet, icePwd), stun.validateMessageIntegrity(packet, icePwd2))
 
-    udpServer.send(packet.raw, 0, packet.length, rinfo.port, rinfo.address, function(err, bytes) {
-        if (err) throw err;
-        console.log('UDP message sent to ' + iceUfrag + ' ' + rinfo.address + ':' + rinfo.port);
-    });
+    const resStun = stun.createMessage(stun.constants.STUN_BINDING_RESPONSE, packet.transactionId)
+    resStun.addAttribute(stun.constants.STUN_ATTR_XOR_MAPPED_ADDRESS, rinfo.address, rinfo.port)
+    resStun.addMessageIntegrity(icePwd)
+    resStun.addFingerprint()
+    const resBuf = resStun.toBuffer()
 
-    var packet2 = stun.create.bindingRequest({ username: iceUfrag, password: icePwd });
+    // udpServer.send(resBuf, 0, resBuf.length, rinfo.port, rinfo.address, function(err, bytes) {
+    //     if (err) throw err;
+    //     console.log('Response Stun message sent to ' + iceUfrag + ' ' + rinfo.address + ':' + rinfo.port);
+    // });
 
-    udpServer.send(packet2.raw, 0, packet2.length, rinfo.port, rinfo.address, function(err, bytes) {
-        if (err) throw err;
-        console.log('UDP2 message sent to ' + rinfo.address + ':' + rinfo.port);
-    });
+    const reqStun = stun.createMessage(stun.constants.STUN_BINDING_REQUEST)
+    reqStun.addAttribute(stun.constants.STUN_ATTR_USERNAME, iceUfrag)
+    reqStun.addMessageIntegrity(icePwd)
+    reqStun.addFingerprint()
+    const reqBuf = reqStun.toBuffer()
+
+    // udpServer.send(reqBuf, 0, reqBuf.length, rinfo.port, rinfo.address, function(err, bytes) {
+    //     if (err) throw err;
+    //     console.log('Request Stun message sent to ' + iceUfrag + ' ' + rinfo.address + ':' + rinfo.port);
+    // });
+
+    // // var packet = stun.create.bindingSuccess({ username: iceUfrag, password: icePwd });
+    // var error, address = { host: rinfo.address, port: rinfo.port, family: 'IPv4' }
+    // if (error = packet.append.responseAddress(address)) console.log(error);
+
+
+    // var packet2 = stun.create.bindingRequest({ username: iceUfrag, password: icePwd });
+
+    // udpServer.send(packet2.raw, 0, packet2.length, rinfo.port, rinfo.address, function(err, bytes) {
+    //     if (err) throw err;
+    //     console.log('UDP2 message sent to ' + rinfo.address + ':' + rinfo.port);
+    // });
 
     // console.log(packet)
     // console.log(`udpServer got: ${msg} from ${rinfo.address}:${rinfo.port}`);
