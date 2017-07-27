@@ -104,7 +104,16 @@ udpServer.on('message', (msg, rinfo) => {
     // const request = stunParser(msg)
     // console.log(request)
     const packet = stun.StunMessage.from(msg)
-    console.log(packet, icePwd, stun.validateFingerprint(packet), stun.validateMessageIntegrity(packet, icePwd), stun.validateMessageIntegrity(packet, icePwd2))
+    if (stun.validateFingerprint(packet)) {
+        console.log('username: ', packet.getAttribute(stun.constants.STUN_ATTR_USERNAME).value.toString('utf8'))
+        if (stun.validateMessageIntegrity(packet, icePwd2)) {
+            console.log('password: ', icePwd2)
+        }
+        // if (stun.validateMessageIntegrity(packet, icePwd)) {
+        //     console.log('password: ', icePwd)
+        // }
+    }
+    // console.log(packet, icePwd, , stun.validateMessageIntegrity(packet, icePwd), stun.validateMessageIntegrity(packet, icePwd2))
 
     const resStun = stun.createMessage(stun.constants.STUN_BINDING_RESPONSE, packet.transactionId)
     resStun.addAttribute(stun.constants.STUN_ATTR_XOR_MAPPED_ADDRESS, rinfo.address, rinfo.port)
