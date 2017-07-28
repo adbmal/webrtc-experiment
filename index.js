@@ -93,6 +93,24 @@ function stunParser(buffer) {
 //     // .uint96('id')
 // console.log(stunParse.getCode())
 
+function isStun(packet) {
+    const numberInRange = byte => byte >= 0 && byte <= 3
+    if (Buffer.isBuffer(packet) && packet.length > 0) {
+        return numberInRange(packet[0])
+    }
+
+    throw new TypeError('Argument 1 should be a Buffer.')
+}
+
+function isDtls(packet) {
+    const numberInRange = byte => byte >= 20 && byte <= 63
+    if (Buffer.isBuffer(packet) && packet.length > 0) {
+        return numberInRange(packet[0])
+    }
+
+    throw new TypeError('Argument 1 should be a Buffer.')
+}
+
 udpServer.on('error', (err) => {
     console.log(`udpServer error:\n${err.stack}`);
     udpServer.close();
@@ -103,43 +121,52 @@ udpServer.on('message', (msg, rinfo) => {
     // var packet = Packet.parse(msg);
     // const request = stunParser(msg)
     // console.log(request)
-    const packet = stun.StunMessage.from(msg)
-    if (stun.validateFingerprint(packet)) {
-        console.log('username: ', packet.getAttribute(stun.constants.STUN_ATTR_USERNAME).value.toString('utf8'))
-        if (stun.validateMessageIntegrity(packet, icePwd2)) {
-            console.log('password: ', icePwd2)
-        }
-        // if (stun.validateMessageIntegrity(packet, icePwd)) {
-        //     console.log('password: ', icePwd)
-        // }
+    if (isDtls(msg)) {
+        console.log('!!!!!!!!!!!!!Dtls Packet !!!')
+        return
     }
-    // console.log(packet, icePwd, , stun.validateMessageIntegrity(packet, icePwd), stun.validateMessageIntegrity(packet, icePwd2))
+    if (isStun(msg)) {
+        console.log('stun msg from ', rinfo.address, rinfo.port)
+        const packet = stun.StunMessage.from(msg)
+            // console.log(packet)
+        if (stun.validateFingerprint(packet)) {
+            // console.log('username: ', packet.getAttribute(stun.constants.STUN_ATTR_USERNAME).value.toString('utf8'))
+            if (stun.validateMessageIntegrity(packet, icePwd2)) {
+                // console.log('password: ', icePwd2)
+                const resStun = stun.createMessage(stun.constants.STUN_BINDING_RESPONSE, packet.transactionId)
+                resStun.addAttribute(stun.constants.STUN_ATTR_XOR_MAPPED_ADDRESS, rinfo.address, rinfo.port)
+                resStun.addMessageIntegrity(icePwd)
+                resStun.addFingerprint()
+                const resBuf = resStun.toBuffer()
 
-    const resStun = stun.createMessage(stun.constants.STUN_BINDING_RESPONSE, packet.transactionId)
-    resStun.addAttribute(stun.constants.STUN_ATTR_XOR_MAPPED_ADDRESS, rinfo.address, rinfo.port)
-    resStun.addMessageIntegrity(icePwd)
-    resStun.addFingerprint()
-    const resBuf = resStun.toBuffer()
+                udpServer.send(resBuf, 0, resBuf.length, rinfo.port, rinfo.address, function(err, bytes) {
+                    if (err) throw err;
+                    // console.log('Response Stun message sent to ' + iceUfrag + ' ' + rinfo.address + ':' + rinfo.port);
+                });
+            }
+            // if (stun.validateMessageIntegrity(packet, icePwd)) {
+            //     console.log('password: ', icePwd)
+            // }
+        }
+        // console.log(packet, icePwd, , stun.validateMessageIntegrity(packet, icePwd), stun.validateMessageIntegrity(packet, icePwd2))
 
-    // udpServer.send(resBuf, 0, resBuf.length, rinfo.port, rinfo.address, function(err, bytes) {
-    //     if (err) throw err;
-    //     console.log('Response Stun message sent to ' + iceUfrag + ' ' + rinfo.address + ':' + rinfo.port);
-    // });
 
-    const reqStun = stun.createMessage(stun.constants.STUN_BINDING_REQUEST)
-    reqStun.addAttribute(stun.constants.STUN_ATTR_USERNAME, iceUfrag)
-    reqStun.addMessageIntegrity(icePwd)
-    reqStun.addFingerprint()
-    const reqBuf = reqStun.toBuffer()
+        // const reqStun = stun.createMessage(stun.constants.STUN_BINDING_REQUEST)
+        // reqStun.addAttribute(stun.constants.STUN_ATTR_USERNAME, iceUfrag + ':' + iceUfrag2)
+        // reqStun.addMessageIntegrity(icePwd)
+        // reqStun.addFingerprint()
+        // const reqBuf = reqStun.toBuffer()
 
-    // udpServer.send(reqBuf, 0, reqBuf.length, rinfo.port, rinfo.address, function(err, bytes) {
-    //     if (err) throw err;
-    //     console.log('Request Stun message sent to ' + iceUfrag + ' ' + rinfo.address + ':' + rinfo.port);
-    // });
-
-    // // var packet = stun.create.bindingSuccess({ username: iceUfrag, password: icePwd });
-    // var error, address = { host: rinfo.address, port: rinfo.port, family: 'IPv4' }
-    // if (error = packet.append.responseAddress(address)) console.log(error);
+        // udpServer.send(reqBuf, 0, reqBuf.length, rinfo.port, rinfo.address, function(err, bytes) {
+        //     if (err) throw err;
+        //     // console.log('Request Stun message sent to ' + iceUfrag + ' ' + rinfo.address + ':' + rinfo.port);
+        // });
+        return
+    }
+    console.log('unknow packet')
+        // // var packet = stun.create.bindingSuccess({ username: iceUfrag, password: icePwd });
+        // var error, address = { host: rinfo.address, port: rinfo.port, family: 'IPv4' }
+        // if (error = packet.append.responseAddress(address)) console.log(error);
 
 
     // var packet2 = stun.create.bindingRequest({ username: iceUfrag, password: icePwd });
